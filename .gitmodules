@@ -1,4 +1,4 @@
 [submodule "external/ConnectedSystemsAPI-CPP"]
 	path = external/ConnectedSystemsAPI-CPP
-	url = https://github.com/Botts-Innovative-Research/ConnectedSystemsAPI-CPP
+	url = https://github.com/opensensorhub/ConnectedSystemsAPI-CPP
 	branch = dev
