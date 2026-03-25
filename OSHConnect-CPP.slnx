@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="external/ConnectedSystemsAPI-CPP/CSAPI-test/CSAPI-test.vcxproj" Id="4aefd5ab-d2f6-fcc8-5352-79a01f5826d8" />
+  <Project Path="external/ConnectedSystemsAPI-CPP/CSAPI/CSAPI.vcxproj" Id="7aedcc9e-20ec-40c7-a6e7-dbdb997ff9c8" />
+  <Project Path="OSHConnect-test/OSHConnect-test.vcxproj" />
+  <Project Path="OSHConnect/OSHConnect.vcxproj" Id="0b3a44a8-9476-4c9b-9a6b-0dd4e204fe0a" />
+</Solution>
