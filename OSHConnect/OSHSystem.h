@@ -6,12 +6,16 @@
 #include <optional>
 #include <stdexcept>
 #include <CSAPI/DataModels/System.h>
+#include <CSAPI/Query/ControlStreamsOfSystemQuery.h>
 #include <CSAPI/Query/DataStreamsOfSystemQuery.h>
 #include <CSAPI/ConnectedSystemsAPI.h>
+#include <CSAPI/DataModels/ControlStreamBuilder.h>
+#include <CSAPI/DataModels/ControlStream.h>
 #include <CSAPI/DataModels/DataStreamBuilder.h>
 #include <CSAPI/DataModels/DataStream.h>
 
 #include "OSHDataStream.h"
+#include "OSHControlStream.h"
 
 namespace OSHConnect {
 	class OSHNode;
@@ -21,6 +25,7 @@ namespace OSHConnect {
 		OSHNode* parentNode;
 		ConnectedSystemsAPI::DataModels::System systemResource;
 		std::vector<OSHDataStream> discoveredDataStreams{};
+		std::vector<OSHControlStream> discoveredControlStreams{};
 
 		OSHDataStream addOrUpdateDataStream(const ConnectedSystemsAPI::DataModels::DataStream& dataStreamResource) {
 			if (!dataStreamResource.getId().has_value()) {
@@ -46,6 +51,32 @@ namespace OSHConnect {
 			OSHDataStream newDataStream(this, dataStreamResourceNew);
 			discoveredDataStreams.push_back(newDataStream);
 			return newDataStream;
+		}
+
+		OSHControlStream addOrUpdateControlStream(const ConnectedSystemsAPI::DataModels::ControlStream& controlStreamResource) {
+			if (!controlStreamResource.getId().has_value()) {
+				throw std::invalid_argument("Control stream resource must have an ID to be added or updated.");
+			}
+
+			auto response = getConSysAPI().getControlStreamsAPI().getControlStreamSchema(controlStreamResource.getId().value());
+
+			// Create a new builder with the control stream resource and the fetched command schema
+			ConnectedSystemsAPI::DataModels::ControlStreamBuilder builder(controlStreamResource);
+			builder.withSchema(response.getItem());
+			auto controlStreamResourceNew = builder.build();
+
+			// Update the existing control stream if there is one
+			for (auto& cs : discoveredControlStreams) {
+				if (cs.getId() == controlStreamResourceNew.getId()) {
+					cs.controlStreamResource = controlStreamResourceNew;
+					return cs;
+				}
+			}
+
+			// Add a new control stream if not found
+			OSHControlStream newControlStream(this, controlStreamResourceNew);
+			discoveredControlStreams.push_back(newControlStream);
+			return newControlStream;
 		}
 
 		friend class OSHNode;
@@ -79,10 +110,40 @@ namespace OSHConnect {
 		/// New data streams will be added to the list of discovered data streams,
 		/// and existing data streams will have their resources updated.
 		/// </summary>
-		/// <param name="query">Optional query string to filter data streams.</param>
+		/// <param name="query">Optional query to filter data streams.</param>
 		/// <returns>The list of discovered data streams.</returns>
 		std::vector<OSHDataStream> discoverDataStreams(const ConnectedSystemsAPI::Query::DataStreamsOfSystemQuery& query) {
 			return discoverDataStreams(query.toString());
+		}
+
+		/// <summary>
+		/// Query the node for the control streams associated with the system.
+		/// New control streams will be added to the list of discovered control streams,
+		/// and existing control streams will have their resources updated.
+		/// </summary>
+		/// <param name="query">Optional query string to filter control streams.</param>
+		/// <returns>The list of discovered control streams.</returns>
+		std::vector<OSHControlStream> discoverControlStreams(std::string query = "") {
+			auto response = getConSysAPI().getControlStreamsAPI().getControlStreamsOfSystem(getId(), query);
+			std::vector<OSHControlStream> discoveredStreams;
+			if (response.isSuccessful()) {
+				for (const auto& controlStreamResource : response.getItems()) {
+					auto newControlStream = addOrUpdateControlStream(controlStreamResource);
+					discoveredStreams.push_back(newControlStream);
+				}
+			}
+			return discoveredStreams;
+		}
+
+		/// <summary>
+		/// Query the node for the control streams associated with the system.
+		/// New control streams will be added to the list of discovered control streams,
+		/// and existing control streams will have their resources updated.
+		/// </summary>
+		/// <param name="query">Optional query to filter control streams.</param>
+		/// <returns>The list of discovered control streams.</returns>
+		std::vector<OSHControlStream> discoverControlStreams(const ConnectedSystemsAPI::Query::ControlStreamsOfSystemQuery& query) {
+			return discoverControlStreams(query.toString());
 		}
 
 		/// <summary>
@@ -143,6 +204,48 @@ namespace OSHConnect {
 		}
 
 		/// <summary>
+		/// Create a new control stream on the OpenSensorHub node using the provided control stream resource.
+		/// </summary>
+		/// <param name="controlStreamResource">The control stream resource to create.</param>
+		/// <returns>The newly created control stream, or std::nullopt if creation failed.</returns>
+		std::optional<OSHControlStream> createControlStream(const ConnectedSystemsAPI::DataModels::ControlStream& controlStreamResource) {
+			auto response = getConSysAPI().getControlStreamsAPI().createControlStream(getId(), controlStreamResource);
+
+			for (const auto& [headerKey, headerValues] : response.getHeaders()) {
+				for (const auto& headerValue : headerValues) {
+					if (headerKey == "Location") {
+						// Extract control stream ID from Location header if available.
+						// The Location header is in the format: /controlstreams/{controlStreamId}
+						std::string location = headerValue;
+						size_t lastSlashPos = location.find_last_of('/');
+						if (lastSlashPos != std::string::npos && lastSlashPos + 1 < location.size()) {
+							std::string newControlStreamId = location.substr(lastSlashPos + 1);
+							return getControlStreamById(newControlStreamId);
+						}
+					}
+				}
+			}
+			return std::nullopt;
+		}
+
+		/// <summary>
+		/// Delete a control stream from the OpenSensorHub node and remove it from the list of discovered control streams.
+		/// </summary>
+		/// <param name="controlStreamId">The ID of the control stream to delete.</param>
+		/// <param name="cascade">If true, all associated commands will also be deleted.</param>
+		/// <returns>True if the control stream was successfully deleted, false otherwise.</returns>
+		bool deleteControlStream(const std::string& controlStreamId, const bool cascade = false) {
+			auto response = getConSysAPI().getControlStreamsAPI().deleteControlStream(controlStreamId, cascade);
+			if (response.isSuccessful()) {
+				discoveredControlStreams.erase(std::remove_if(discoveredControlStreams.begin(), discoveredControlStreams.end(),
+					[&controlStreamId](const OSHControlStream& cs) { return cs.getId() == controlStreamId; }),
+					discoveredControlStreams.end());
+				return true;
+			}
+			return false;
+		}
+
+		/// <summary>
 		/// Update the system properties on the server.
 		/// Note: After updating the system, the system properties are refreshed from the server,
 		/// not set to the provided system properties.
@@ -171,6 +274,40 @@ namespace OSHConnect {
 		}
 
 		/// <summary>
+		/// Get a control stream by its ID and add it to the list of discovered control streams if not already present.
+		/// If the control stream is already in the list of discovered control streams,
+		/// it will be updated with the latest resource from the server.
+		/// </summary>
+		/// <param name="controlStreamId">The ID of the control stream to retrieve.</param>
+		/// <returns>An optional containing the control stream if found, or std::nullopt if not found.</returns>
+		std::optional<OSHControlStream> getControlStreamById(const std::string& controlStreamId) {
+			auto response = getConSysAPI().getControlStreamsAPI().getControlStreamById(controlStreamId);
+			if (response.isSuccessful()) {
+				return addOrUpdateControlStream(response.getItem());
+			}
+			return std::nullopt;
+		}
+
+		/// <summary>
+		/// Query the node for the latest commands with the specified parameters.
+		/// </summary>
+		std::vector<ConnectedSystemsAPI::DataModels::Command> fetchCommands(std::string query = "") {
+			auto response = getConSysAPI().getCommandsAPI().fetchCommands(query);
+			if (response.isSuccessful() && !response.getItems().empty()) {
+				return response.getItems();
+			}
+			return {};
+		}
+
+		/// <summary>
+		/// Query the node for the latest commands with the specified parameters.
+		/// </summary>
+		std::vector<ConnectedSystemsAPI::DataModels::Command> fetchCommands(const ConnectedSystemsAPI::Query::CommandsOfControlStreamQuery& query) {
+			return fetchCommands(query.toString());
+		}
+
+
+		/// <summary>
 		/// The system resource representing this system.
 		/// </summary>
 		ConnectedSystemsAPI::DataModels::System getSystemResource() const { return systemResource; }
@@ -187,6 +324,10 @@ namespace OSHConnect {
 	};
 
 	inline ConnectedSystemsAPI::ConSysAPI& OSHDataStream::getConSysAPI() {
+		return parentSystem->getConSysAPI();
+	}
+
+	inline ConnectedSystemsAPI::ConSysAPI& OSHControlStream::getConSysAPI() {
 		return parentSystem->getConSysAPI();
 	}
 }

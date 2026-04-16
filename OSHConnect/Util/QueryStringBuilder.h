@@ -91,7 +91,7 @@ namespace OSHConnect::Util {
 		QueryStringBuilder& withParameter(std::string_view key, const T& value) {
 			std::ostringstream oss;
 			oss << value;
-			return withParameter(key, oss.str());
+			return withParameter(key, std::string_view{oss.str()});
 		}
 
 		/// <summary>

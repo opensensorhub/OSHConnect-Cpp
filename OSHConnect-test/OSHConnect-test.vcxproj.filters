@@ -42,6 +42,9 @@
     <ClCompile Include="WebsocketIntegrationTest.cpp">
       <Filter>Source Files\IntegrationTests</Filter>
     </ClCompile>
+    <ClCompile Include="ControlStreamIntegrationTest.cpp">
+      <Filter>Source Files\IntegrationTests</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">

@@ -69,6 +69,9 @@
     <ClInclude Include="StreamManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="OSHControlStream.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="OSHConnect.cpp">
